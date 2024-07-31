@@ -1,0 +1,15 @@
+kind: OvnEip
+apiVersion: kubeovn.io/v1
+metadata:
+  name: kube-ovn-worker
+spec:
+  externalSubnet: external
+  type: lsp
+---
+kind: OvnEip
+apiVersion: kubeovn.io/v1
+metadata:
+  name: kube-ovn-worker2
+spec:
+  externalSubnet: external
+  type: lsp
