@@ -37,6 +37,7 @@ ENABLE_BIND_LOCAL_IP=${ENABLE_BIND_LOCAL_IP:-true}
 ENABLE_TPROXY=${ENABLE_TPROXY:-false}
 OVS_VSCTL_CONCURRENCY=${OVS_VSCTL_CONCURRENCY:-100}
 ENABLE_COMPACT=${ENABLE_COMPACT:-false}
+SECURE_SERVING=${SECURE_SERVING:-false}
 
 # debug
 DEBUG_WRAPPER=${DEBUG_WRAPPER:-}
@@ -4104,6 +4105,7 @@ spec:
           - --enable-lb-svc=$ENABLE_LB_SVC
           - --keep-vm-ip=$ENABLE_KEEP_VM_IP
           - --node-local-dns-ip=$NODE_LOCAL_DNS_IP
+          - --secure-serving=${SECURE_SERVING}
           securityContext:
             runAsUser: 0
             privileged: false
@@ -4155,17 +4157,21 @@ spec:
           readinessProbe:
             exec:
               command:
-                - /kube-ovn/kube-ovn-controller-healthcheck
+                - /kube-ovn/kube-ovn-healthcheck
+                - --port=10660
+                - --tls=${SECURE_SERVING}
             periodSeconds: 3
-            timeoutSeconds: 45
+            timeoutSeconds: 1
           livenessProbe:
             exec:
               command:
-                - /kube-ovn/kube-ovn-controller-healthcheck
+                - /kube-ovn/kube-ovn-healthcheck
+                - --port=10660
+                - --tls=${SECURE_SERVING}
             initialDelaySeconds: 300
             periodSeconds: 7
             failureThreshold: 5
-            timeoutSeconds: 45
+            timeoutSeconds: 1
           resources:
             requests:
               cpu: 200m
@@ -4259,6 +4265,7 @@ spec:
           - --kubelet-dir=$KUBELET_DIR
           - --enable-tproxy=$ENABLE_TPROXY
           - --ovs-vsctl-concurrency=$OVS_VSCTL_CONCURRENCY
+          - --secure-serving=${SECURE_SERVING}
         securityContext:
           runAsUser: 0
           privileged: false
@@ -4337,16 +4344,22 @@ spec:
           initialDelaySeconds: 30
           periodSeconds: 7
           successThreshold: 1
-          tcpSocket:
-            port: 10665
-          timeoutSeconds: 3
+          exec:
+            command:
+              - /kube-ovn/kube-ovn-healthcheck
+              - --port=10665
+              - --tls=${SECURE_SERVING}
+          timeoutSeconds: 1
         readinessProbe:
           failureThreshold: 3
           periodSeconds: 7
           successThreshold: 1
-          tcpSocket:
-            port: 10665
-          timeoutSeconds: 3
+          exec:
+            command:
+              - /kube-ovn/kube-ovn-healthcheck
+              - --port=10665
+              - --tls=${SECURE_SERVING}
+          timeoutSeconds: 1
         resources:
           requests:
             cpu: 100m
@@ -4565,6 +4578,7 @@ spec:
           imagePullPolicy: $IMAGE_PULL_POLICY
           command: ["/kube-ovn/start-ovn-monitor.sh"]
           args:
+          - --secure-serving=${SECURE_SERVING}
           - --log_file=/var/log/kube-ovn/kube-ovn-monitor.log
           - --logtostderr=false
           - --alsologtostderr=true
@@ -4628,17 +4642,23 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 7
             successThreshold: 1
-            tcpSocket:
-              port: 10661
-            timeoutSeconds: 3
+            exec:
+              command:
+                - /kube-ovn/kube-ovn-healthcheck
+                - --port=10661
+                - --tls=${SECURE_SERVING}
+            timeoutSeconds: 1
           readinessProbe:
             failureThreshold: 3
             initialDelaySeconds: 30
             periodSeconds: 7
             successThreshold: 1
-            tcpSocket:
-              port: 10661
-            timeoutSeconds: 3
+            exec:
+              command:
+                - /kube-ovn/kube-ovn-healthcheck
+                - --port=10661
+                - --tls=${SECURE_SERVING}
+            timeoutSeconds: 1
       nodeSelector:
         kubernetes.io/os: "linux"
         kube-ovn/role: "master"

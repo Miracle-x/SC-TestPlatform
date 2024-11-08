@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qiandao1-net1
+  annotations:
+    kubeovn.io/subnet: subnet1
+spec:
+  containers:
+  - name: qiandao1
+    image: qiandao1:latest
+    imagePullPolicy: IfNotPresent
+    ports:
+    - containerPort: 80

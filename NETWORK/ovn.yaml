@@ -99,7 +99,7 @@ spec:
       hostNetwork: true
       containers:
         - name: ovn-central
-          image: "docker.io/kubeovn/kube-ovn:v1.12.19"
+          image: "docker.io/kubeovn/kube-ovn:v1.12.20"
           imagePullPolicy: IfNotPresent
           command:
           - /kube-ovn/start-db.sh
@@ -114,7 +114,7 @@ spec:
             - name: ENABLE_SSL
               value: "false"
             - name: NODE_IPS
-              value: 172.18.0.2
+              value: 172.18.0.3
             - name: POD_IP
               valueFrom:
                 fieldRef:

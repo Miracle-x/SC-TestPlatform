@@ -3,6 +3,7 @@
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/AutoGen-CTF" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/environment/ctf_challenges" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/kube-ovn" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/kubevirt-manager" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/kubevirt-manager/src/assets/noVNC" vcs="Git" />

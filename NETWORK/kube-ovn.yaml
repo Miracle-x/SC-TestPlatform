@@ -8,7 +8,7 @@ metadata:
     kubernetes.io/description: |
       kube-ovn vpc-nat common config
 data:
-  image: docker.io/kubeovn/vpc-nat-gateway:v1.12.19
+  image: docker.io/kubeovn/vpc-nat-gateway:v1.12.20
 ---
 kind: ConfigMap
 apiVersion: v1
@@ -69,7 +69,7 @@ spec:
       hostNetwork: true
       containers:
         - name: kube-ovn-controller
-          image: "docker.io/kubeovn/kube-ovn:v1.12.19"
+          image: "docker.io/kubeovn/kube-ovn:v1.12.20"
           imagePullPolicy: IfNotPresent
           args:
           - /kube-ovn/start-controller.sh
@@ -101,6 +101,7 @@ spec:
           - --enable-lb-svc=false
           - --keep-vm-ip=true
           - --node-local-dns-ip=
+          - --secure-serving=false
           securityContext:
             runAsUser: 0
             privileged: false
@@ -127,7 +128,7 @@ spec:
                 fieldRef:
                   fieldPath: spec.nodeName
             - name: OVN_DB_IPS
-              value: 172.18.0.2
+              value: 172.18.0.3
             - name: POD_IP
               valueFrom:
                 fieldRef:
@@ -152,17 +153,21 @@ spec:
           readinessProbe:
             exec:
               command:
-                - /kube-ovn/kube-ovn-controller-healthcheck
+                - /kube-ovn/kube-ovn-healthcheck
+                - --port=10660
+                - --tls=false
             periodSeconds: 3
-            timeoutSeconds: 45
+            timeoutSeconds: 1
           livenessProbe:
             exec:
               command:
-                - /kube-ovn/kube-ovn-controller-healthcheck
+                - /kube-ovn/kube-ovn-healthcheck
+                - --port=10660
+                - --tls=false
             initialDelaySeconds: 300
             periodSeconds: 7
             failureThreshold: 5
-            timeoutSeconds: 45
+            timeoutSeconds: 1
           resources:
             requests:
               cpu: 200m
@@ -221,7 +226,7 @@ spec:
       hostPID: true
       initContainers:
       - name: install-cni
-        image: "docker.io/kubeovn/kube-ovn:v1.12.19"
+        image: "docker.io/kubeovn/kube-ovn:v1.12.20"
         imagePullPolicy: IfNotPresent
         command: ["/kube-ovn/install-cni.sh"]
         securityContext:
@@ -234,7 +239,7 @@ spec:
             name: local-bin
       containers:
       - name: cni-server
-        image: "docker.io/kubeovn/kube-ovn:v1.12.19"
+        image: "docker.io/kubeovn/kube-ovn:v1.12.20"
         imagePullPolicy: IfNotPresent
         command:
           - bash
@@ -256,6 +261,7 @@ spec:
           - --kubelet-dir=/var/lib/kubelet
           - --enable-tproxy=false
           - --ovs-vsctl-concurrency=100
+          - --secure-serving=false
         securityContext:
           runAsUser: 0
           privileged: false
@@ -334,16 +340,22 @@ spec:
           initialDelaySeconds: 30
           periodSeconds: 7
           successThreshold: 1
-          tcpSocket:
-            port: 10665
-          timeoutSeconds: 3
+          exec:
+            command:
+              - /kube-ovn/kube-ovn-healthcheck
+              - --port=10665
+              - --tls=false
+          timeoutSeconds: 1
         readinessProbe:
           failureThreshold: 3
           periodSeconds: 7
           successThreshold: 1
-          tcpSocket:
-            port: 10665
-          timeoutSeconds: 3
+          exec:
+            command:
+              - /kube-ovn/kube-ovn-healthcheck
+              - --port=10665
+              - --tls=false
+          timeoutSeconds: 1
         resources:
           requests:
             cpu: 100m
@@ -427,7 +439,7 @@ spec:
       hostPID: true
       containers:
         - name: pinger
-          image: "docker.io/kubeovn/kube-ovn:v1.12.19"
+          image: "docker.io/kubeovn/kube-ovn:v1.12.20"
           command:
           - /kube-ovn/kube-ovn-pinger
           args:
@@ -558,10 +570,11 @@ spec:
       hostNetwork: true
       containers:
         - name: kube-ovn-monitor
-          image: "docker.io/kubeovn/kube-ovn:v1.12.19"
+          image: "docker.io/kubeovn/kube-ovn:v1.12.20"
           imagePullPolicy: IfNotPresent
           command: ["/kube-ovn/start-ovn-monitor.sh"]
           args:
+          - --secure-serving=false
           - --log_file=/var/log/kube-ovn/kube-ovn-monitor.log
           - --logtostderr=false
           - --alsologtostderr=true
@@ -625,17 +638,23 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 7
             successThreshold: 1
-            tcpSocket:
-              port: 10661
-            timeoutSeconds: 3
+            exec:
+              command:
+                - /kube-ovn/kube-ovn-healthcheck
+                - --port=10661
+                - --tls=false
+            timeoutSeconds: 1
           readinessProbe:
             failureThreshold: 3
             initialDelaySeconds: 30
             periodSeconds: 7
             successThreshold: 1
-            tcpSocket:
-              port: 10661
-            timeoutSeconds: 3
+            exec:
+              command:
+                - /kube-ovn/kube-ovn-healthcheck
+                - --port=10661
+                - --tls=false
+            timeoutSeconds: 1
       nodeSelector:
         kubernetes.io/os: "linux"
         kube-ovn/role: "master"

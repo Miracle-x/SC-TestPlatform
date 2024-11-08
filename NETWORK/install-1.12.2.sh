@@ -15,15 +15,13 @@ ENABLE_LB=${ENABLE_LB:-true}
 ENABLE_NP=${ENABLE_NP:-true}
 ENABLE_EIP_SNAT=${ENABLE_EIP_SNAT:-true}
 LS_DNAT_MOD_DL_DST=${LS_DNAT_MOD_DL_DST:-true}
-LS_CT_SKIP_DST_LPORT_IPS=${LS_CT_SKIP_DST_LPORT_IPS:-true}
 ENABLE_EXTERNAL_VPC=${ENABLE_EXTERNAL_VPC:-true}
 CNI_CONFIG_PRIORITY=${CNI_CONFIG_PRIORITY:-01}
 ENABLE_LB_SVC=${ENABLE_LB_SVC:-false}
-ENABLE_NAT_GW=${ENABLE_NAT_GW:-true}
+ENABLE_NAT_GW=${ENABLE_NAT_GW:-false}
 ENABLE_KEEP_VM_IP=${ENABLE_KEEP_VM_IP:-true}
 ENABLE_ARP_DETECT_IP_CONFLICT=${ENABLE_ARP_DETECT_IP_CONFLICT:-true}
 NODE_LOCAL_DNS_IP=${NODE_LOCAL_DNS_IP:-}
-ENABLE_IC=${ENABLE_IC:-$(kubectl get node --show-labels | grep -q "ovn.kubernetes.io/ic-gw" && echo true || echo false)}
 # exchange link names of OVS bridge and the provider nic
 # in the default provider-network
 EXCHANGE_LINK_NAME=${EXCHANGE_LINK_NAME:-false}
@@ -36,7 +34,6 @@ DPDK_TUNNEL_IFACE=${DPDK_TUNNEL_IFACE:-br-phy}
 ENABLE_BIND_LOCAL_IP=${ENABLE_BIND_LOCAL_IP:-true}
 ENABLE_TPROXY=${ENABLE_TPROXY:-false}
 OVS_VSCTL_CONCURRENCY=${OVS_VSCTL_CONCURRENCY:-100}
-ENABLE_COMPACT=${ENABLE_COMPACT:-false}
 
 # debug
 DEBUG_WRAPPER=${DEBUG_WRAPPER:-}
@@ -49,7 +46,7 @@ CNI_BIN_DIR="/opt/cni/bin"
 
 REGISTRY="docker.io/kubeovn"
 VPC_NAT_IMAGE="vpc-nat-gateway"
-VERSION="v1.12.20"
+VERSION="v1.12.2"
 IMAGE_PULL_POLICY="IfNotPresent"
 POD_CIDR="10.16.0.0/16"                # Do NOT overlap with NODE/SVC/JOIN CIDR
 POD_GATEWAY="10.16.0.1"
@@ -82,6 +79,7 @@ DEPRECATED_LABEL="node-role.kubernetes.io/master" # The node label to deploy OVN
 NETWORK_TYPE="geneve"                             # geneve or vlan
 TUNNEL_TYPE="geneve"                              # geneve, vxlan or stt. ATTENTION: some networkpolicy cannot take effect when using vxlan and stt need custom compile ovs kernel module
 POD_NIC_TYPE="veth-pair"                          # veth-pair or internal-port
+POD_DEFAULT_FIP_TYPE=""                           # iptables, pod can set iptables fip automatically by enable fip annotation
 
 # VLAN Config only take effect when NETWORK_TYPE is vlan
 VLAN_INTERFACE_NAME=""
@@ -2133,12 +2131,6 @@ spec:
         openAPIV3Schema:
           type: object
           properties:
-            metadata:
-              type: object
-              properties:
-                name:
-                  type: string
-                  pattern: ^[^0-9]
             status:
               type: object
               properties:
@@ -2261,10 +2253,6 @@ spec:
                       - 253 # default
                       - 254 # main
                       - 255 # local
-                mtu:
-                  type: integer
-                  minimum: 68
-                  maximum: 65535
                 private:
                   type: boolean
                 vlan:
@@ -2333,8 +2321,6 @@ spec:
                 enableLb:
                   type: boolean
                 enableEcmp:
-                  type: boolean
-                enableMulticastSnoop:
                   type: boolean
                 routeTable:
                   type: string
@@ -2839,6 +2825,8 @@ rules:
       - patch
   - apiGroups:
       - ""
+      - networking.k8s.io
+      - apps
     resources:
       - services
       - endpoints
@@ -2929,28 +2917,17 @@ rules:
       - ""
     resources:
       - pods
-      - namespaces
-    verbs:
-      - get
-      - list
-      - patch
-      - watch
-  - apiGroups:
-      - ""
-    resources:
-      - nodes
-    verbs:
-      - get
-      - list
-      - patch
-      - update
-      - watch
-  - apiGroups:
-      - ""
-    resources:
       - pods/exec
+      - namespaces
+      - nodes
+      - configmaps
     verbs:
       - create
+      - get
+      - list
+      - watch
+      - patch
+      - update
   - apiGroups:
       - "k8s.cni.cncf.io"
     resources:
@@ -2960,53 +2937,40 @@ rules:
   - apiGroups:
       - ""
       - networking.k8s.io
-    resources:
-      - networkpolicies
-      - configmaps
-    verbs:
-      - get
-      - list
-      - watch
-  - apiGroups:
       - apps
     resources:
+      - networkpolicies
       - daemonsets
     verbs:
       - get
-  - apiGroups:
-      - ""
-    resources:
-      - services
-      - services/status
-    verbs:
-      - get
-      - list
-      - update
-      - create
-      - delete
-      - watch
-  - apiGroups:
-      - ""
-    resources:
-      - endpoints
-    verbs:
-      - create
-      - update
-      - get
       - list
       - watch
   - apiGroups:
+      - ""
       - apps
     resources:
+      - services/status
+    verbs:
+      - update
+  - apiGroups:
+      - ""
+      - networking.k8s.io
+      - apps
+      - extensions
+    resources:
+      - services
+      - endpoints
       - statefulsets
       - deployments
       - deployments/scale
     verbs:
-      - get
-      - list
       - create
       - delete
       - update
+      - patch
+      - get
+      - list
+      - watch
   - apiGroups:
       - ""
     resources:
@@ -3029,18 +2993,6 @@ rules:
     verbs:
       - get
       - list
-  - apiGroups:
-      - authentication.k8s.io
-    resources:
-      - tokenreviews
-    verbs:
-      - create
-  - apiGroups:
-      - authorization.k8s.io
-    resources:
-      - subjectaccessreviews
-    verbs:
-      - create
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -3050,20 +3002,6 @@ roleRef:
   name: system:ovn
   kind: ClusterRole
   apiGroup: rbac.authorization.k8s.io
-subjects:
-  - kind: ServiceAccount
-    name: ovn
-    namespace: kube-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: ovn
-  namespace: kube-system
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: extension-apiserver-authentication-reader
 subjects:
   - kind: ServiceAccount
     name: ovn
@@ -3089,33 +3027,27 @@ rules:
       - "kubeovn.io"
     resources:
       - subnets
-      - vlans
       - provider-networks
+      - ovn-eips
+      - ovn-eips/status
+      - ips
     verbs:
       - get
       - list
+      - patch
+      - update
       - watch
   - apiGroups:
       - ""
-      - "kubeovn.io"
     resources:
-      - ovn-eips
-      - ovn-eips/status
-      - nodes
       - pods
-      - vlans
+      - nodes
+      - configmaps
     verbs:
       - get
       - list
       - patch
       - watch
-  - apiGroups:
-      - "kubeovn.io"
-    resources:
-      - ips
-    verbs:
-      - get
-      - update
   - apiGroups:
       - ""
     resources:
@@ -3124,26 +3056,6 @@ rules:
       - create
       - patch
       - update
-  - apiGroups:
-      - ""
-    resources:
-      - configmaps
-    verbs:
-      - get
-      - list
-      - watch
-  - apiGroups:
-      - authentication.k8s.io
-    resources:
-      - tokenreviews
-    verbs:
-      - create
-  - apiGroups:
-      - authorization.k8s.io
-    resources:
-      - subjectaccessreviews
-    verbs:
-      - create
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -3153,20 +3065,6 @@ roleRef:
   name: system:kube-ovn-cni
   kind: ClusterRole
   apiGroup: rbac.authorization.k8s.io
-subjects:
-  - kind: ServiceAccount
-    name: kube-ovn-cni
-    namespace: kube-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: kube-ovn-cni
-  namespace: kube-system
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: extension-apiserver-authentication-reader
 subjects:
   - kind: ServiceAccount
     name: kube-ovn-cni
@@ -3197,23 +3095,13 @@ rules:
       - get
       - list
   - apiGroups:
+      - ""
+      - networking.k8s.io
       - apps
     resources:
       - daemonsets
     verbs:
       - get
-  - apiGroups:
-      - authentication.k8s.io
-    resources:
-      - tokenreviews
-    verbs:
-      - create
-  - apiGroups:
-      - authorization.k8s.io
-    resources:
-      - subjectaccessreviews
-    verbs:
-      - create
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -3223,20 +3111,6 @@ roleRef:
   name: system:kube-ovn-app
   kind: ClusterRole
   apiGroup: rbac.authorization.k8s.io
-subjects:
-  - kind: ServiceAccount
-    name: kube-ovn-app
-    namespace: kube-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: kube-ovn-app
-  namespace: kube-system
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: extension-apiserver-authentication-reader
 subjects:
   - kind: ServiceAccount
     name: kube-ovn-app
@@ -3353,15 +3227,11 @@ spec:
         - name: ovn-central
           image: "$REGISTRY/kube-ovn:$VERSION"
           imagePullPolicy: $IMAGE_PULL_POLICY
-          command:
+          command: 
           - /kube-ovn/start-db.sh
           securityContext:
-            runAsUser: 0
-            privileged: false
             capabilities:
-              add:
-                - NET_BIND_SERVICE
-                - SYS_NICE
+              add: ["SYS_NICE"]
           env:
             - name: ENABLE_SSL
               value: "$ENABLE_SSL"
@@ -3389,14 +3259,10 @@ spec:
               value: "$DEBUG_WRAPPER"
             - name: PROBE_INTERVAL
               value: "180000"
-            - name: OVN_NORTHD_PROBE_INTERVAL
-              value: "5000" 
             - name: OVN_LEADER_PROBE_INTERVAL
               value: "5"
             - name: OVN_NORTHD_N_THREADS
               value: "1"
-            - name: ENABLE_COMPACT
-              value: "$ENABLE_COMPACT"
           resources:
             requests:
               cpu: 300m
@@ -3687,17 +3553,11 @@ spec:
         - name: openvswitch
           image: "$REGISTRY/kube-ovn:$VERSION"
           imagePullPolicy: $IMAGE_PULL_POLICY
-          command:
+          command: 
           - /kube-ovn/start-ovs.sh
           securityContext:
             runAsUser: 0
-            privileged: false
-            capabilities:
-              add:
-                - NET_ADMIN
-                - NET_BIND_SERVICE
-                - SYS_MODULE
-                - SYS_NICE
+            privileged: true
           env:
             - name: ENABLE_SSL
               value: "$ENABLE_SSL"
@@ -3763,7 +3623,8 @@ spec:
             exec:
               command:
                 - bash
-                - /kube-ovn/ovs-healthcheck.sh
+                - -c
+                - LOG_ROTATE=true /kube-ovn/ovs-healthcheck.sh
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 45
@@ -3781,7 +3642,7 @@ spec:
               cpu: 200m
               memory: 200Mi
             limits:
-              cpu: "2"
+              cpu: 1000m
               memory: 1000Mi
       nodeSelector:
         kubernetes.io/os: "linux"
@@ -3923,7 +3784,8 @@ spec:
             exec:
               command:
                 - bash
-                - /kube-ovn/ovs-healthcheck.sh
+                - -c
+                - LOG_ROTATE=true /kube-ovn/ovs-healthcheck.sh
             periodSeconds: 5
             timeoutSeconds: 45
           livenessProbe:
@@ -4052,15 +3914,6 @@ spec:
         - key: CriticalAddonsOnly
           operator: Exists
       affinity:
-        nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - preference:
-              matchExpressions:
-              - key: "ovn.kubernetes.io/ic-gw"
-                operator: NotIn
-                values:
-                - "true"
-            weight: 100
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
@@ -4089,7 +3942,6 @@ spec:
           - --default-exchange-link-name=$EXCHANGE_LINK_NAME
           - --default-vlan-id=$VLAN_ID
           - --ls-dnat-mod-dl-dst=$LS_DNAT_MOD_DL_DST
-          - --ls-ct-skip-dst-lport-ips=$LS_CT_SKIP_DST_LPORT_IPS
           - --pod-nic-type=$POD_NIC_TYPE
           - --enable-lb=$ENABLE_LB
           - --enable-np=$ENABLE_NP
@@ -4100,16 +3952,11 @@ spec:
           - --gc-interval=$GC_INTERVAL
           - --inspect-interval=$INSPECT_INTERVAL
           - --log_file=/var/log/kube-ovn/kube-ovn-controller.log
-          - --log_file_max_size=200
+          - --log_file_max_size=0
           - --enable-lb-svc=$ENABLE_LB_SVC
           - --keep-vm-ip=$ENABLE_KEEP_VM_IP
+          - --pod-default-fip-type=$POD_DEFAULT_FIP_TYPE
           - --node-local-dns-ip=$NODE_LOCAL_DNS_IP
-          securityContext:
-            runAsUser: 0
-            privileged: false
-            capabilities:
-              add:
-                - NET_BIND_SERVICE
           env:
             - name: ENABLE_SSL
               value: "$ENABLE_SSL"
@@ -4117,10 +3964,6 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-            - name: POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
             - name: KUBE_NAMESPACE
               valueFrom:
                 fieldRef:
@@ -4131,10 +3974,6 @@ spec:
                   fieldPath: spec.nodeName
             - name: OVN_DB_IPS
               value: $addresses
-            - name: POD_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
             - name: POD_IPS
               valueFrom:
                 fieldRef:
@@ -4175,7 +4014,6 @@ spec:
               memory: 1Gi
       nodeSelector:
         kubernetes.io/os: "linux"
-        kube-ovn/role: master
       volumes:
         - name: localtime
           hostPath:
@@ -4255,19 +4093,13 @@ spec:
           - --logtostderr=false
           - --alsologtostderr=true
           - --log_file=/var/log/kube-ovn/kube-ovn-cni.log
-          - --log_file_max_size=200
+          - --log_file_max_size=0
           - --kubelet-dir=$KUBELET_DIR
           - --enable-tproxy=$ENABLE_TPROXY
           - --ovs-vsctl-concurrency=$OVS_VSCTL_CONCURRENCY
         securityContext:
           runAsUser: 0
-          privileged: false
-          capabilities:
-            add:
-              - NET_ADMIN
-              - NET_BIND_SERVICE
-              - NET_RAW
-              - SYS_ADMIN
+          privileged: true
         env:
           - name: ENABLE_SSL
             value: "$ENABLE_SSL"
@@ -4287,14 +4119,6 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: status.podIPs
-          - name: POD_NAME
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.name
-          - name: POD_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
           - name: ENABLE_BIND_LOCAL_IP
             value: "$ENABLE_BIND_LOCAL_IP"
           - name: DBUS_SYSTEM_BUS_ADDRESS
@@ -4312,7 +4136,7 @@ spec:
             name: cni-conf
           - mountPath: /run/openvswitch
             name: host-run-ovs
-            mountPropagation: HostToContainer
+            mountPropagation: Bidirectional
           - mountPath: /run/ovn
             name: host-run-ovn
           - mountPath: /host/var/run/dbus
@@ -4320,7 +4144,7 @@ spec:
             mountPropagation: HostToContainer
           - mountPath: /var/run/netns
             name: host-ns
-            mountPropagation: HostToContainer
+            mountPropagation: Bidirectional
           - mountPath: /var/log/kube-ovn
             name: kube-ovn-log
           - mountPath: /var/log/openvswitch
@@ -4439,7 +4263,7 @@ spec:
           - --logtostderr=false
           - --alsologtostderr=true
           - --log_file=/var/log/kube-ovn/kube-ovn-pinger.log
-          - --log_file_max_size=200
+          - --log_file_max_size=0
           imagePullPolicy: $IMAGE_PULL_POLICY
           securityContext:
             runAsUser: 0
@@ -4568,7 +4392,7 @@ spec:
           - --log_file=/var/log/kube-ovn/kube-ovn-monitor.log
           - --logtostderr=false
           - --alsologtostderr=true
-          - --log_file_max_size=200
+          - --log_file_max_size=0
           securityContext:
             runAsUser: 0
             privileged: false
@@ -4579,18 +4403,6 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
-            - name: POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: POD_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
             - name: POD_IPS
               valueFrom:
                 fieldRef:
@@ -4623,22 +4435,22 @@ spec:
               name: kube-ovn-tls
             - mountPath: /var/log/kube-ovn
               name: kube-ovn-log
-          livenessProbe:
-            failureThreshold: 3
-            initialDelaySeconds: 30
-            periodSeconds: 7
-            successThreshold: 1
-            tcpSocket:
-              port: 10661
-            timeoutSeconds: 3
           readinessProbe:
-            failureThreshold: 3
+            exec:
+              command:
+              - cat
+              - /var/run/ovn/ovn-controller.pid
+            periodSeconds: 10
+            timeoutSeconds: 45
+          livenessProbe:
+            exec:
+              command:
+              - cat
+              - /var/run/ovn/ovn-controller.pid
             initialDelaySeconds: 30
-            periodSeconds: 7
-            successThreshold: 1
-            tcpSocket:
-              port: 10661
-            timeoutSeconds: 3
+            periodSeconds: 10
+            failureThreshold: 5
+            timeoutSeconds: 45
       nodeSelector:
         kubernetes.io/os: "linux"
         kube-ovn/role: "master"
@@ -4735,121 +4547,6 @@ EOF
 kubectl apply -f kube-ovn.yaml
 kubectl rollout status deployment/kube-ovn-controller -n kube-system --timeout 300s
 kubectl rollout status daemonset/kube-ovn-cni -n kube-system --timeout 300s
-
-if $ENABLE_IC; then
-
-cat <<EOF > ovn-ic-controller.yaml
-kind: Deployment
-apiVersion: apps/v1
-metadata:
-  name: ovn-ic-controller
-  namespace: kube-system
-  annotations:
-    kubernetes.io/description: |
-      OVN IC Controller
-spec:
-  replicas: 1
-  strategy:
-    rollingUpdate:
-      maxSurge: 0
-      maxUnavailable: 1
-    type: RollingUpdate
-  selector:
-    matchLabels:
-      app: ovn-ic-controller
-  template:
-    metadata:
-      labels:
-        app: ovn-ic-controller
-        component: network
-        type: infra
-    spec:
-      tolerations:
-        - effect: NoSchedule
-          operator: Exists
-        - effect: NoExecute
-          operator: Exists
-        - key: CriticalAddonsOnly
-          operator: Exists
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchLabels:
-                  app: ovn-ic-controller
-              topologyKey: kubernetes.io/hostname
-      priorityClassName: system-cluster-critical
-      serviceAccountName: ovn
-      hostNetwork: true
-      containers:
-        - name: ovn-ic-controller
-          image: "$REGISTRY/kube-ovn:$VERSION"
-          imagePullPolicy: $IMAGE_PULL_POLICY
-          command: ["/kube-ovn/start-ic-controller.sh"]
-          args:
-          - --log_file=/var/log/kube-ovn/kube-ovn-ic-controller.log
-          - --log_file_max_size=200
-          - --logtostderr=false
-          - --alsologtostderr=true
-          securityContext:
-            capabilities:
-              add: ["SYS_NICE"]
-          env:
-            - name: ENABLE_SSL
-              value: "$ENABLE_SSL"
-            - name: POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-            - name: OVN_DB_IPS
-              value: $addresses
-          resources:
-            requests:
-              cpu: 300m
-              memory: 200Mi
-            limits:
-              cpu: 3
-              memory: 1Gi
-          volumeMounts:
-            - mountPath: /var/run/ovn
-              name: host-run-ovn
-            - mountPath: /etc/ovn
-              name: host-config-ovn
-            - mountPath: /var/log/ovn
-              name: host-log-ovn
-            - mountPath: /etc/localtime
-              name: localtime
-            - mountPath: /var/run/tls
-              name: kube-ovn-tls
-            - mountPath: /var/log/kube-ovn
-              name: kube-ovn-log
-      nodeSelector:
-        kubernetes.io/os: "linux"
-        kube-ovn/role: "master"
-      volumes:
-        - name: host-run-ovn
-          hostPath:
-            path: /run/ovn
-        - name: host-config-ovn
-          hostPath:
-            path: /etc/origin/ovn
-        - name: host-log-ovn
-          hostPath:
-            path: /var/log/ovn
-        - name: localtime
-          hostPath:
-            path: /etc/localtime
-        - name: kube-ovn-log
-          hostPath:
-            path: /var/log/kube-ovn
-        - name: kube-ovn-tls
-          secret:
-            optional: true
-            secretName: kube-ovn-tls
-EOF
-kubectl apply -f ovn-ic-controller.yaml
-fi
-
 echo "-------------------------------"
 echo ""
 
@@ -4860,17 +4557,8 @@ for ns in $(kubectl get ns --no-headers -o custom-columns=NAME:.metadata.name); 
   done
 done
 
-kubectl rollout status deployment/coredns -n kube-system --timeout 300s
-while true; do 
-  pods=(`kubectl get pod -n kube-system -l app=kube-ovn-pinger --template '{{range .items}}{{if .metadata.deletionTimestamp}}{{.metadata.name}}{{"\n"}}{{end}}{{end}}'`)
-  if [ ${#pods[@]} -eq 0 ]; then
-    break
-  fi
-  echo "Waiting for ${pods[@]} to be deleted..."
-  sleep 1
-done
-kubectl rollout status daemonset/kube-ovn-pinger -n kube-system --timeout 120s
-kubectl wait pod --for=condition=Ready -l app=kube-ovn-pinger -n kube-system --timeout 120s
+kubectl rollout status daemonset/kube-ovn-pinger -n kube-system --timeout 300s
+kubectl rollout status deployment/coredns -n kube-system --timeout 600s
 echo "-------------------------------"
 echo ""
 
