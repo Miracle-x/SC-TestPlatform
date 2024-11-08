@@ -1,3 +1,4 @@
 /venv/
 /kube-ovn/
 /AutoGen-CTF/package_source/
+*/node_modules/
