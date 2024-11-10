@@ -1,0 +1,2 @@
+access_key = 'a847fe1953b09c03e88d2746db18062d8420bc533ff0ba7ac361a42955bf126a'
+secret_key = '37098ec5f9d7be9865bd743a717b75887e13bbfc91a17fb3579ceffadd1cbaed'

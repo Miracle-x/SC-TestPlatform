@@ -10,11 +10,13 @@
 </template>
 
 <script>
+console.log()
 export default {
-  data() {
-    return {
-      iframeUrl: 'https://localhost:8443/', // 你想要嵌入的网页URL
-    };
+  computed: {
+    iframeUrl(){
+      return  'https://localhost:8443/#/overview?namespace=net1' // 你想要嵌入的网页URL
+    }
   },
+
 };
 </script>

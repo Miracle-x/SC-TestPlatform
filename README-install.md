@@ -128,16 +128,6 @@ ovn-nbctl lr-route-list ovn-cluster
 ```
 
 # 网络拓扑可视化
-caretta
-```shell
-helm repo add groundcover https://helm.groundcover.com/
-helm repo update
-helm install caretta --namespace caretta --create-namespace groundcover/caretta
-kubectl port-forward --namespace caretta caretta-grafana-7bdc98d88c-m8nhc 3000:3000
-#删除
-# helm delete caretta --namespace caretta
-# kubectl delete namespace caretta
-```
 DeepFlow
 ```shell
 helm repo add deepflow https://deepflowio.github.io/deepflow
@@ -151,6 +141,23 @@ NODE_PORT=$(kubectl get --namespace deepflow -o jsonpath="{.spec.ports[0].nodePo
 NODE_IP=$(kubectl get nodes -o jsonpath="{.items[0].status.addresses[0].address}")
 echo -e "Grafana URL: http://$NODE_IP:$NODE_PORT  \nGrafana auth: admin:deepflow"
 ```
+允许iframe
+```shell
+#修改configMap里的Grafana配置，grafana.ini里加上如下代
+    [auth.anonymous]
+
+    enabled = true
+
+    org_name = Main Org.
+
+    org_role = Admin
+
+    [security]
+
+    allow_embedding = true
+```
+
+
 # k8s dashboard
 
 https://github.com/kubernetes/dashboard/releases/tag/kubernetes-dashboard-7.7.0
@@ -168,15 +175,25 @@ NOTE: In case port-forward command does not work, make sure that kong service na
         kubectl -n kubernetes-dashboard get svc
 
 Dashboard will be available at:
-  https://loca
-23
-lhost:8443
+  https://localhost:8443
 
 ```shell
 kubectl create serviceaccount my-admin-sa -n kubernetes-dashboard
 kubectl create clusterrolebinding my-admin-binding --clusterrole=cluster-admin --serviceaccount=kubernetes-dashboard:my-admin-sa
 kubectl -n kubernetes-dashboard create token my-admin-sa
 ```
+
+# 创建underlay网络
+```shell
+kubectl create ns underlay
+kubectl apply -f kube-ovn-3nodes/test-underlay/net1.yaml
+kubectl get nodes --show-labels
+```
+```shell
+kubectl apply -f kube-ovn-3nodes/test-underlay/vlan1.yaml
+kubectl apply -f kube-ovn-3nodes/test-underlay/subnet1.yaml
+```
+
 
 
 # 部署靶场题目

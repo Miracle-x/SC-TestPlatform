@@ -1,0 +1,104 @@
+apiVersion: kubeovn.io/v1
+kind: Subnet
+metadata:
+  name: web-net1
+spec:
+  protocol: IPv4
+  cidrBlock: 153.153.1.0/24
+  gateway: 153.153.1.1
+  gatewayType: distributed
+  natOutgoing: true
+  routeTable: ""
+  namespaces:
+  - net1
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: busybox-deployment-1
+  namespace: net1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: busybox
+  template:
+    metadata:
+      labels:
+        app: busybox
+    spec:
+      containers:
+      - name: busybox
+        image: busybox
+        imagePullPolicy: IfNotPresent
+        command:
+          - sleep
+          - "3600"
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: php-deployment
+  namespace: net1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: php
+  template:
+    metadata:
+      labels:
+        app: php
+    spec:
+      containers:
+      - name: php
+        image: php:5.6-apache
+        imagePullPolicy: IfNotPresent
+        ports:
+          - containerPort: 80
+        env:
+          - name: DB_HOST
+            value: mariadb
+          - name: DB_USER
+            value: sqli
+          - name: DB_PASSWORD
+            value: sqli
+          - name: DB_NAME
+            value: sqli
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mariadb-deployment
+  namespace: net1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mariadb
+  template:
+    metadata:
+      labels:
+        app: mariadb
+    spec:
+      containers:
+      - name: mariadb
+        image: mariadb:10.4
+        imagePullPolicy: IfNotPresent
+        ports:
+          - containerPort: 3306
+        env:
+          - name: MYSQL_DATABASE
+            value: sqli
+          - name: MYSQL_ROOT_PASSWORD
+            value: sqli
+          - name: MYSQL_USER
+            value: sqli
+          - name: MYSQL_PASSWORD
+            value: sqli

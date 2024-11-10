@@ -67,7 +67,7 @@ spec:
                 fieldRef:
                   fieldPath: spec.nodeName
             - name: OVN_DB_IPS
-              value: 172.18.0.3,172.18.0.2,172.18.0.4
+              value: 172.18.0.2,172.18.0.4,172.18.0.3
             - name: DEBUG_WRAPPER
               value: ""
             - name: OVN_REMOTE_PROBE_INTERVAL

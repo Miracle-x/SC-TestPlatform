@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: busybox-deployment-1
+  namespace: overlay
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: busybox1
+  template:
+    metadata:
+      labels:
+        app: busybox1
+    spec:
+      containers:
+      - name: busybox
+        image: busybox
+        imagePullPolicy: IfNotPresent  # 添加 imagePullPolicy
+        command:
+          - sleep
+          - "3600"

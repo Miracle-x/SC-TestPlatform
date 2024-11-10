@@ -1,7 +1,7 @@
 apiVersion: kubeovn.io/v1
 kind: Vlan
 metadata:
-  name: vlan-underlay
+  name: vlan2
 spec:
   id: 0
   provider: net1

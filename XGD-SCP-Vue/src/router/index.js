@@ -5,7 +5,7 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      component: () => import('../views/environment.vue'),
+      component: () => import('../views/scene.vue'),
     },
     {
       path: '/environment',
@@ -46,6 +46,22 @@ const router = createRouter({
       // this generates a separate chunk (About.[hash].js) for this route
       // which is lazy-loaded when the route is visited.
       component: () => import('../views/attack-agent.vue'),
+    },
+    {
+      path: '/report',
+      name: 'report',
+      // route level code-splitting
+      // this generates a separate chunk (About.[hash].js) for this route
+      // which is lazy-loaded when the route is visited.
+      component: () => import('../views/report.vue'),
+    },
+    {
+      path: '/scene',
+      name: 'scene',
+      // route level code-splitting
+      // this generates a separate chunk (About.[hash].js) for this route
+      // which is lazy-loaded when the route is visited.
+      component: () => import('../views/scene.vue'),
     },
   ],
 })
