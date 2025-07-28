@@ -1,4 +1,8 @@
+
+
 # XDG-SC-Platform
+点击查看AI生成的[项目详细介绍](https://zread.ai/Miracle-x/SC-TestPlatform)
+
 我们用kind模拟的k8s集群，并在其上模拟建立私有云以作为网络安全靶场。
 如需在真实环境使用，建议使用真实的k8s集群作为基础平台。
 
